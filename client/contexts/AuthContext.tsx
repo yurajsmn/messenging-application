@@ -74,49 +74,81 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   async function login(email: string, password: string) {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    
-    // Update user online status
-    await setDoc(doc(db, 'users', user.uid), {
-      online: true,
-      lastSeen: new Date()
-    }, { merge: true });
-  }
-
-  async function logout() {
-    if (currentUser) {
-      // Update user offline status
-      await setDoc(doc(db, 'users', currentUser.uid), {
-        online: false,
-        lastSeen: new Date()
-      }, { merge: true });
-    }
-    
-    await signOut(auth);
-    setUserProfile(null);
-  }
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Fetch user profile from Firestore
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data() as UserProfile);
-        }
+    try {
+      // Sign in with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Fetch user profile from Firestore
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      
+      if (userDoc.exists()) {
+        const profile = userDoc.data() as UserProfile;
+        setUserProfile(profile);
         
-        // Update online status
+        // Update user online status
         await setDoc(doc(db, 'users', user.uid), {
           online: true,
           lastSeen: new Date()
         }, { merge: true });
-      } else {
-        setUserProfile(null);
       }
       
       setCurrentUser(user);
-      setLoading(false);
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  }
+
+  async function logout() {
+    try {
+      if (currentUser) {
+        // Update user offline status
+        await setDoc(doc(db, 'users', currentUser.uid), {
+          online: false,
+          lastSeen: new Date()
+        }, { merge: true });
+      }
+      
+      // Clear local state first
+      setCurrentUser(null);
+      setUserProfile(null);
+      
+      // Then sign out from Firebase
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    }
+  }
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          // Fetch user profile from Firestore
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const profile = userDoc.data() as UserProfile;
+            setUserProfile(profile);
+            
+            // Update online status
+            await setDoc(doc(db, 'users', user.uid), {
+              online: true,
+              lastSeen: new Date()
+            }, { merge: true });
+          }
+          setCurrentUser(user);
+        } else {
+          // User is signed out
+          setCurrentUser(null);
+          setUserProfile(null);
+        }
+      } catch (error) {
+        console.error('Auth state change error:', error);
+      } finally {
+        setLoading(false);
+      }
     });
 
     return unsubscribe;

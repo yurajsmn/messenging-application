@@ -335,6 +335,8 @@ export default function MessagingInterface() {
     try {
       await logout();
       toast.success('Logged out successfully');
+      // Force navigation to login page after logout
+      window.location.href = '/auth/login';
     } catch (error) {
       console.error('Logout error:', error);
       toast.error('Failed to logout');
